@@ -15,9 +15,11 @@ use std::env::{set_var, var};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CircuitInput {
-    pub x: String,
-    pub vec1: Vec<f64>,
-    pub vec2: Vec<f64>, // field element, but easier to deserialize as a string
+    pub d: Vec<f64>,
+    pub m: Vec<Vec<f64>>,
+    pub u: Vec<Vec<f64>>,
+    pub v: Vec<Vec<f64>>,
+     // field element, but easier to deserialize as a string
 }
 
 fn some_algorithm_in_zk<F: ScalarField>(
@@ -28,7 +30,6 @@ fn some_algorithm_in_zk<F: ScalarField>(
     F: BigPrimeField,
 {
    
-
     
     // `Context` can roughly be thought of as a single-threaded execution trace of a program we want to ZK prove. We do some post-processing on `Context` to optimally divide the execution trace into multiple columns in a PLONKish arithmetization
     // More advanced usage with multi-threaded witness generation is possible, but we do not explain it here
@@ -55,52 +56,32 @@ fn some_algorithm_in_zk<F: ScalarField>(
 
     zkmatrix.print(&fpchip);
 
+    let m = input.m;
+    let u = input.u;
+    let v = input.v;
 
-    // lets first compute the exp of x using the fixed point chip
+    let mq : ZkMatrix<F, PRECISION_BITS> = ZkMatrix::new(ctx, &fpchip, m);
+    let uq : ZkMatrix<F, PRECISION_BITS> = ZkMatrix::new(ctx, &fpchip, u);
+    let vq : ZkMatrix<F, PRECISION_BITS> = ZkMatrix::new(ctx, &fpchip, v);
 
-    let x = &input.x;
+    let d = input.d;
+    let dq : ZkVector<F, PRECISION_BITS> = ZkVector::new(ctx, &fpchip, d);
 
-    let x: f64 = x.parse().unwrap();
+    ZkMatrix::verify_svd(ctx, &fpchip, &mq, &uq, &dq, &vq, 0.000001);
 
-    let x_q = fpchip.quantization(x);
 
-    let x_q = ctx.load_witness(x_q);
 
-    let x_exp_q = fpchip.qexp(ctx, x_q);
 
-    let x_exp = fpchip.dequantization(*x_exp_q.value());
 
-    println!("x: {}", x_exp);
 
-    // lets compute the dot product of the two vectors
 
-    let vec1 = ctx.assign_witnesses(input.vec1.iter().map(|b| fpchip.quantization(*b as f64)));
-    let vec2 = ctx.assign_witnesses(input.vec2.iter().map(|b| fpchip.quantization(*b as f64)));
 
-    let l =vec1.len();
 
-    let ans = fpchip.quantization(0.0);
+    // mat1q.print(&fpchip);
 
-    let mut ans = ctx.load_witness(ans);
 
-    for i in 1..l {
-        let prod = fpchip.qmul(ctx, vec1[i], vec2[i]);
-        let ans2 = fpchip.qadd(ctx, prod, ans);
-        ans = ans2;
 
-    }
-
-    let ans = fpchip.dequantization(*ans.value());
-
-    println!("prod: {}", ans);
     
-
-
-
-
-
-
-
 
 
 
@@ -299,7 +280,7 @@ impl<F: BigPrimeField, const PRECISION_BITS: u32> ZkMatrix<F, PRECISION_BITS> {
             for j in 0..b.num_col{
                 let mut new_ele = ctx.load_witness(F::from(0));
                 for k in 0..a.num_col{
-                    let prod = fpchip.qmul(ctx, a.matrix[i][j], b.matrix[k][j]);
+                    let prod = fpchip.qmul(ctx, a.matrix[i][k], b.matrix[k][j]);
                     new_ele = fpchip.qadd(ctx, new_ele, prod);
                 }
                 new_row.push(new_ele);
@@ -309,6 +290,34 @@ impl<F: BigPrimeField, const PRECISION_BITS: u32> ZkMatrix<F, PRECISION_BITS> {
         return Self { matrix: c, num_rows: a.num_rows, num_col: b.num_col};
         
     }
+
+        // Function for multiplying two matrices a and d were d is diagonal, d is given as a vector
+
+    pub fn matrix_mul_diag(
+        ctx: &mut Context<F>,
+        fpchip: &FixedPointChip<F, PRECISION_BITS>,
+        a: &Self,
+        d: &ZkVector<F, PRECISION_BITS>,
+    )-> Self {
+
+        let l = ZkVector::size(d);
+
+        assert_eq!(a.num_col, l);
+
+        let mut c: Vec<Vec<AssignedValue<F>>> = Vec::new();
+
+        for i in 0..a.num_rows{
+            let mut new_row: Vec<AssignedValue<F>> = Vec::new();
+            for j in 0..a.num_col{
+                let prod = fpchip.qmul(ctx, a.matrix[i][j], d.v[j]);
+                new_row.push(prod);
+            }
+            c.push(new_row);
+        }
+        return Self { matrix: c, num_rows: a.num_rows, num_col: a.num_col};
+        
+    }
+
         // Verify the product of the two matrices by the naive method up to a small error
 
     pub fn verify_mul_simple(
@@ -434,16 +443,15 @@ impl<F: BigPrimeField, const PRECISION_BITS: u32> ZkMatrix<F, PRECISION_BITS> {
         fpchip: &FixedPointChip<F, PRECISION_BITS>,
         m: &Self,
         u: &Self,
-        d: &Self,
+        d: &ZkVector<F,PRECISION_BITS>,
         v: &Self,
         delta: f64,
     ) {
         
         ZkMatrix::check_is_ortho(ctx, fpchip, u, delta);
         ZkMatrix::check_is_ortho(ctx, fpchip, v, delta);
-        ZkMatrix::check_is_diag(ctx, fpchip, d);
 
-        let prod = ZkMatrix::matrix_mul(ctx, fpchip, u, d);
+        let prod = ZkMatrix::matrix_mul_diag(ctx, fpchip, u, d);
 
         ZkMatrix::verify_mul_simple(ctx, fpchip, &prod, v, m, delta);
     }
