@@ -367,22 +367,79 @@ pub fn two_phase_svd_verif<F: ScalarField>(
     return circuit;
 }
 
+// fn main() {
+//     set_var("DEGREE", 20.to_string());
+//     set_var("LOOKUP_BITS", 19.to_string());
+//     let k: u32 = var("DEGREE").unwrap_or_else(|_| panic!("DEGREE not set")).parse().unwrap();
+
+//     // This is the correct SVD
+//     let data = fs::read_to_string("./data/matrix.in").expect("Unable to read file");
+//     // Use this file for an SVD that is incorrect at one position
+//     // let data = fs::read_to_string("./data/matrix-wrong.in").expect("Unable to read file");
+
+//     let input: CircuitInput = serde_json::from_str(&data).expect("JSON was not well-formatted");
+
+//     let circuit = two_phase_svd_verif(RlcThreadBuilder::<Fr>::mock(), input);
+//     MockProver::run(k, &circuit, vec![]).unwrap().assert_satisfied();
+
+//     println!("Test passed");
+// }
+
 fn main() {
     set_var("DEGREE", 20.to_string());
     set_var("LOOKUP_BITS", 19.to_string());
     let k: u32 = var("DEGREE").unwrap_or_else(|_| panic!("DEGREE not set")).parse().unwrap();
 
     // This is the correct SVD
-    let data = fs::read_to_string("./data/matrix.in").expect("Unable to read file");
+    // let data = fs::read_to_string("./data/matrix.in").expect("Unable to read file");
     // Use this file for an SVD that is incorrect at one position
-    // let data = fs::read_to_string("./data/matrix-wrong.in").expect("Unable to read file");
+    let data = fs::read_to_string("./data/matrix-wrong.in").expect("Unable to read file");
 
     let input: CircuitInput = serde_json::from_str(&data).expect("JSON was not well-formatted");
 
-    let circuit = two_phase_svd_verif(RlcThreadBuilder::<Fr>::mock(), input);
-    MockProver::run(k, &circuit, vec![]).unwrap().assert_satisfied();
+    env_logger::init();
 
-    println!("Test passed");
+    let mut rng = StdRng::from_seed([0u8; 32]);
+    let params = ParamsKZG::<Bn256>::setup(k, &mut rng);
+    let circuit = two_phase_svd_verif(RlcThreadBuilder::<Fr>::keygen(), input.clone());
+    circuit.config(k as usize, Some(6));
+
+    println!("vk gen started");
+    let vk = keygen_vk(&params, &circuit).unwrap();
+    println!("vk gen done");
+    let pk = keygen_pk(&params, vk, &circuit).unwrap();
+    println!("pk gen done");
+    println!();
+    println!("==============STARTING PROOF GEN===================");
+    let break_points = circuit.0.break_points.take();
+    drop(circuit);
+    let circuit = two_phase_svd_verif(RlcThreadBuilder::<Fr>::prover(), input);
+    *circuit.0.break_points.borrow_mut() = break_points;
+
+    let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+    create_proof::<
+        KZGCommitmentScheme<Bn256>,
+        ProverSHPLONK<'_, Bn256>,
+        Challenge255<G1Affine>,
+        _,
+        Blake2bWrite<Vec<u8>, G1Affine, Challenge255<G1Affine>>,
+        _,
+    >(&params, &pk, &[circuit], &[&[]], rng, &mut transcript)
+    .unwrap();
+    let proof = transcript.finalize();
+    println!("proof gen done");
+    let verifier_params = params.verifier_params();
+    let strategy = SingleStrategy::new(verifier_params);
+    let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
+    verify_proof::<
+        KZGCommitmentScheme<Bn256>,
+        VerifierSHPLONK<'_, Bn256>,
+        Challenge255<G1Affine>,
+        Blake2bRead<&[u8], G1Affine, Challenge255<G1Affine>>,
+        SingleStrategy<'_, Bn256>,
+    >(verifier_params, pk.get_vk(), strategy, &[&[]], &mut transcript)
+    .unwrap();
+    println!("verify done");
 }
 
 // to create input file use
