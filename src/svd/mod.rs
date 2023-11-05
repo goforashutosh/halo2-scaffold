@@ -151,7 +151,7 @@ pub fn check_svd_phase1<F: BigPrimeField, const PRECISION_BITS: u32>(
 /// `eps_svd` and `eps_u` are the error parameters defined in the error analysis notes
 pub fn err_calc(p: u32, size: usize, max_norm: f64, eps_svd: f64, eps_u: f64) -> (f64, f64) {
     let precision = 2.0_f64.powf(-1.0 * (p as f64 + 1.0));
-    let err_svd = precision * (size as f64) * (1.0 + max_norm + precision)
+    let err_svd = precision * (size as f64) * (1.0 + max_norm + eps_svd + precision)
         + (size as f64) * max_norm * precision
         + (1.0 + eps_u).powf(0.5) * (max_norm + eps_svd) * eps_u
         + (1.0 + eps_u).powf(0.5) * eps_svd;

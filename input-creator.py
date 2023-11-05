@@ -2,6 +2,7 @@ import numpy.linalg as lin
 import numpy as np
 import json
 import sys
+import os
 
 if __name__ == "__main__":
     N = M = 0
@@ -35,6 +36,8 @@ if __name__ == "__main__":
     dict_svd = {"m": mat_ran, "u": U, "d": D, "v": V}
 
     json_file_path = "./data/matrix.in"
+    if not os.path.exists("./data"):
+        os.makedirs("./data")
 
     with open(json_file_path, "w") as json_file:
         # Write the dictionary to the JSON file

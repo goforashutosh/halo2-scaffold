@@ -27,6 +27,7 @@ use halo2_base::{
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::env::{set_var, var};
 use std::fs;
 use zk_fixed_point_chip::gadget::fixed_point::{FixedPointChip, FixedPointInstructions};
@@ -284,8 +285,9 @@ pub fn two_phase_svd_verif<F: ScalarField>(
     let prover = builder.witness_gen_only();
     let ctx = builder.gate_builder.main(0);
 
+    // see [Error Analysis for SVD.pdf] for how the following parameters should be chosen
     // NOTE: 2^-32 = 2.3e-10
-    // 1e-12 error estimated for matrices with operator norm <= 100 and size <= 1000
+    // 1e-12 error estimated for matrices with operator norm <= 100 and size <= 1000 (using svd_error.py)
     // multiplying this by 100 to be on the safer side
     const EPS_SVD: f64 = 1e-10;
     // theoretical analysis indicates this can be as small as 1e-13
@@ -386,14 +388,22 @@ pub fn two_phase_svd_verif<F: ScalarField>(
 // }
 
 fn main() {
+    // Get the command-line arguments
+    let args: Vec<String> = env::args().collect();
+
+    // Check if at least one argument is provided (the program name is the first argument)
+    if args.len() < 2 {
+        eprintln!("Incorrect usage; use: cargo run --example svd_example -- <filename>");
+        std::process::exit(1);
+    }
+    // The file name is the second argument (index 1)
+    let file_path = "./data/".to_string() + &args[1] + ".in";
+
     set_var("DEGREE", 20.to_string());
     set_var("LOOKUP_BITS", 19.to_string());
     let k: u32 = var("DEGREE").unwrap_or_else(|_| panic!("DEGREE not set")).parse().unwrap();
 
-    // This is the correct SVD
-    // let data = fs::read_to_string("./data/matrix.in").expect("Unable to read file");
-    // Use this file for an SVD that is incorrect at one position
-    let data = fs::read_to_string("./data/matrix-wrong.in").expect("Unable to read file");
+    let data = fs::read_to_string(file_path).expect("Unable to read file");
 
     let input: CircuitInput = serde_json::from_str(&data).expect("JSON was not well-formatted");
 
@@ -445,4 +455,4 @@ fn main() {
 // to create input file use
 // python3.9 input-creator.py <SIZE> <SIZE>
 // to run use:
-// cargo run --example svd_example
+// cargo run --example svd_example -- matrix

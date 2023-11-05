@@ -360,7 +360,7 @@ impl<F: BigPrimeField, const PRECISION_BITS: u32> ZkMatrix<F, PRECISION_BITS> {
         return Self { matrix: c, num_rows: num_rows, num_col: num_col };
     }
     /// hash all the matrices in the given list
-    fn hash_matrix_list(
+    pub fn hash_matrix_list(
         ctx: &mut Context<F>,
         gate: &GateChip<F>,
         matrix_list: &Vec<Self>,
@@ -551,8 +551,6 @@ pub fn honest_prover_mat_mul<F: BigPrimeField>(
 /// -- all assuming `a` and `v` are field elements (and not fixed point encoded)
 ///
 /// Assumes matrix `a` is well defined (rows are equal size) and asserts (outside circuit) `a` can be multiplied to `v`
-///
-/// #CONSTRAINTS = N^2
 pub fn field_mat_vec_mul<F: BigPrimeField>(
     ctx: &mut Context<F>,
     gate: &GateChip<F>,
@@ -561,7 +559,6 @@ pub fn field_mat_vec_mul<F: BigPrimeField>(
 ) -> Vec<AssignedValue<F>> {
     assert_eq!(a[0].len(), v.len());
     let mut y: Vec<AssignedValue<F>> = Vec::new();
-    // #CONSTRAINTS = N^2
     for row in a {
         let mut w: Vec<QuantumCell<F>> = Vec::new();
         for x in v {
@@ -590,8 +587,6 @@ pub fn field_mat_vec_mul<F: BigPrimeField>(
 ///
 /// In case `K > M`, multiplication result is actually the `N X M` matrix given by `a*[Diag(v) 0]^T` where 0 is the `(M X (K-M))` matrix of all zeroes;
 /// this choice allows us to handle one of the cases in the SVD check
-///
-/// #CONSTRAINTS = N^2
 pub fn mat_times_diag_mat<F: BigPrimeField>(
     ctx: &mut Context<F>,
     gate: &GateChip<F>,
@@ -600,7 +595,6 @@ pub fn mat_times_diag_mat<F: BigPrimeField>(
 ) -> Vec<Vec<AssignedValue<F>>> {
     assert!(v.len() <= a[0].len());
     let mut m: Vec<Vec<AssignedValue<F>>> = Vec::new();
-    // #CONSTRAINTS = N^2
     for i in 0..a.len() {
         let mut new_row: Vec<AssignedValue<F>> = Vec::new();
         for j in 0..v.len() {
