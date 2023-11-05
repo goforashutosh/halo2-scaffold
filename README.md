@@ -1,5 +1,7 @@
 # Halo2-svd
 
+_This is the full-proof branch where the example carries out full proof generation and verification_
+
 This repository provides functions for efficiently proving the singular value decomposition (SVD) of a real valued matrix in a Halo2 circuit. In addition, it also provides functions for manipulating real valued matrices and vectors.
 
 ## Main functionalities
